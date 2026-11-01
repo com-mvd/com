@@ -221,7 +221,7 @@ async function actualizarBase(s, sec) {
   try {
     if (!s.webhook) { await leerBase(s, sec); return; }
     // Un solo mensaje mientras n8n arma la base y GitHub la publica
-    mostrar(est, 'Actualizando');
+    mostrar(est, 'Actualizando...');
     let r;
     try {
       // ngrok gratis muestra una página de aviso a los navegadores; este encabezado la saltea
