@@ -44,16 +44,6 @@ body{font-family:var(--font);-webkit-font-smoothing:antialiased;background:var(-
 .hpill{margin-left:auto;background:var(--blue-bg);border:1px solid #C0D3F5;border-radius:99px;padding:5px 14px;font-size:11px;font-weight:700;color:var(--blue-dark);letter-spacing:.06em;text-transform:uppercase}
 
 /* UPLOAD */
-.upload-card{background:var(--card);border:2px dashed var(--border2);border-radius:18px;padding:3rem 2rem;text-align:center;cursor:pointer;transition:border-color .25s,background .25s,box-shadow .25s;box-shadow:var(--shadow)}
-.upload-card:hover,.upload-card.drag{border-color:var(--blue);background:var(--blue-light);box-shadow:var(--shadow-md)}
-.upload-card.loaded{border-color:var(--green-border);background:var(--green-bg);box-shadow:0 2px 8px rgba(26,102,69,.10)}
-.upload-card.loaded .upload-icon{background:#D2EFE1;border-color:var(--green-border)}
-.upload-card.loaded .upload-icon svg{stroke:var(--green-text)}
-.upload-card.loaded .upload-title{color:var(--green-text)}
-.upload-icon{width:56px;height:56px;border-radius:16px;background:var(--blue-bg);border:1px solid #C0D3F5;display:flex;align-items:center;justify-content:center;margin:0 auto 16px}
-.upload-icon svg{width:26px;height:26px;stroke:var(--blue);fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
-.upload-title{font-size:16px;font-weight:600;color:var(--text);margin-bottom:6px}
-.upload-sub{font-size:12px;color:var(--text3);line-height:1.6}
 
 /* PROGRESS */
 .prog-wrap{margin-top:1.25rem}
@@ -138,7 +128,6 @@ tbody td{padding:10px 13px;word-break:break-word;vertical-align:middle}
 .veh{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:600;color:var(--text2)}
 .veh svg{width:14px;height:14px;stroke:var(--blue);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 
-#file-input{display:none}
 
 /* MODAL */
 .modal-bg{display:none;position:fixed;inset:0;background:rgba(20,24,40,.72);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);z-index:2000;align-items:center;justify-content:center;padding:16px}
@@ -158,22 +147,13 @@ tbody td{padding:10px 13px;word-break:break-word;vertical-align:middle}
     </div>
     <div>
       <div class="htitle">Planificador de Agenda</div>
-
+      <div class="hsub" id="datos-info"></div>
     </div>
   </div>
 
-  <div class="upload-card" id="upload-zone" onclick="document.getElementById('file-input').click()">
-    <div class="upload-icon">
-      <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><polyline points="9 15 12 12 15 15"/></svg>
-    </div>
-    <div class="upload-title">Arrastrá o hacé clic para subir el CSV</div>
-    
-  </div>
-  <input type="file" id="file-input" accept=".csv">
-
-  <div id="prog-wrap" class="prog-wrap" style="display:none">
+  <div id="prog-wrap" class="prog-wrap">
     <div class="prog-bar"><div class="prog-fill" id="prog-fill" style="width:0%"></div></div>
-    <div class="prog-label" id="prog-label">Procesando...</div>
+    <div class="prog-label" id="prog-label">Cargando agendas...</div>
   </div>
   <div id="err-msg" class="err" style="display:none"></div>
 
@@ -205,6 +185,7 @@ tbody td{padding:10px 13px;word-break:break-word;vertical-align:middle}
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="assets/llave.js"></script>
 <script>
 const COL={muni:1,circuito:2,fecha:4,estado:6,tipo:15,dir:9,desc:12,info:14,transportista:13,obs:18};
 const RAEE=[
@@ -411,17 +392,6 @@ function fmtDate(ds){
   return`${D[dt.getDay()]} ${+d} de ${M[+mo-1]} de ${y}`;
 }
 function esc(s){return(s||'').toString().replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
-
-function parseCSV(txt){
-  const rows=[];let row=[],f='',q=false,i=0;
-  while(i<txt.length){
-    const c=txt[i];
-    if(q){if(c==='"'){if(txt[i+1]==='"'){f+='"';i+=2;continue;}else{q=false;i++;continue;}}f+=c;i++;}
-    else{if(c==='"'){q=true;i++;continue;}if(c===','){row.push(f);f='';i++;continue;}if(c==='\r'||c==='\n'){row.push(f);f='';if(c==='\r'&&txt[i+1]==='\n')i++;if(row.some(x=>x.trim()))rows.push(row);row=[];i++;continue;}f+=c;i++;}
-  }
-  if(f||row.length){row.push(f);if(row.some(x=>x.trim()))rows.push(row);}
-  return rows;
-}
 
 let allRows=[],planData=null;
 
@@ -701,39 +671,74 @@ function toggleBreakdown(key){
   panel.style.display='block';
 }
 
-function processFile(file){
-  document.getElementById('prog-wrap').style.display='block';
-  document.getElementById('err-msg').style.display='none';
-  document.getElementById('main-section').style.display='none';
-  document.getElementById('prog-fill').style.width='10%';
-  document.getElementById('prog-label').textContent='Leyendo archivo...';
-  const r=new FileReader();
-  r.onload=e=>{
-    document.getElementById('prog-fill').style.width='40%';
-    document.getElementById('prog-label').textContent='Clasificando agendas...';
-    const rows=parseCSV(e.target.result);
-    if(rows.length<2){showErr('El archivo está vacío o sin datos.');return;}
-    allRows=rows.slice(1).map(c=>{c._cat=clasificar(c);return c;});
-    document.getElementById('prog-fill').style.width='100%';
-    document.getElementById('prog-label').textContent=`${allRows.length.toLocaleString('es-UY')} agendas cargadas.`;
-    document.getElementById('upload-zone').classList.add('loaded');
-    document.getElementById('upload-zone').querySelector('.upload-title').textContent=`✓ ${allRows.length.toLocaleString('es-UY')} agendas cargadas`;
+// ── Datos: la base de Agenda del repo com-mvd/bases (la sube n8n con el botón Actualizar de la portada) ──
+// Ya no se sube un CSV acá. La base trae las columnas del Grafana (las mismas del CSV de antes); se arma cada
+// fila como la del CSV (texto, fechas "2026-11-02 09:00:00") en el orden de COL. Descripción, información
+// (teléfonos) y observaciones completas vienen cifradas en agenda-privado.json: se abren con la contraseña
+// del sitio (la portada la pide una vez); sin ella quedan los textos públicos, sin teléfonos.
+const BASES='https://com-mvd.github.io/bases/';
+// Columnas del CSV del Grafana, en el orden en que las usa COL
+const CSV_COLS=['id_agenda','municipio','circuito','fecha_de_reclamo','fecha_de_agenda','hecho','estado','fecha_resuelto','incidente','direccion','latitud','longitud','descripcion','transportista','informacion','tipo_de_reclamo','hora_de_descargas','lugar_de_descargas','observaciones','contenedor','matricula'];
+const sinTilde=s=>(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase();
+const dd=n=>String(n).padStart(2,'0');
+// Segundos del reloj de Montevideo (sin zona) -> "2026-11-02 09:00:00"
+const fechaBase=s=>{const d=new Date(s*1000);return`${d.getUTCFullYear()}-${dd(d.getUTCMonth()+1)}-${dd(d.getUTCDate())} ${dd(d.getUTCHours())}:${dd(d.getUTCMinutes())}:${dd(d.getUTCSeconds())}`;};
+
+async function bajarBase(){
+  const q='?_='+Date.now();
+  const res=await fetch(BASES+'agenda.json.gz'+q,{cache:'no-store'});
+  if(!res.ok)throw new Error('No se pudo bajar la base de Agenda (HTTP '+res.status+')');
+  const bytes=new Uint8Array(await res.arrayBuffer());
+  // Por si el navegador ya la descomprimió solo: gzip empieza con 1f 8b
+  const texto=bytes[0]===0x1f&&bytes[1]===0x8b
+    ?await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'))).text()
+    :new TextDecoder().decode(bytes);
+  return JSON.parse(texto);
+}
+async function bajarPrivado(){
+  try{
+    const llave=await COMLlave.obtener(BASES+'llave.json');
+    return await COMLlave.abrir(llave,BASES+'agenda-privado.json');
+  }catch(err){console.warn('Sin datos privados:',err.message);return null;}
+}
+
+function armarFilas(base,priv){
+  const cols=base.columnas.map(sinTilde),dicc=base.dicc||{},fechas=new Set((base.fechas||[]).map(sinTilde));
+  const dic=Object.fromEntries(Object.entries(dicc).map(([k,v])=>[sinTilde(k),v]));
+  const pos=CSV_COLS.map(c=>cols.indexOf(c));
+  const faltan=CSV_COLS.filter((c,i)=>pos[i]<0&&Object.values(COL).includes(i));
+  if(faltan.length)throw new Error('A la base le faltan columnas: '+faltan.join(', '));
+  const conv=CSV_COLS.map(c=>dic[c]?v=>(v==null?'':dic[c][v]??''):fechas.has(c)?v=>(v==null?'':fechaBase(v)):v=>(v==null?'':String(v)));
+  // Orden de los textos en el privado: el de "privadas" de la base
+  const privCols=(base.privadas||[]).map(sinTilde),iId=cols.indexOf('id_agenda');
+  return base.registros.map(r=>{
+    const fila=CSV_COLS.map((c,i)=>pos[i]<0?'':conv[i](r[pos[i]]));
+    const p=priv&&priv[r[iId]];
+    if(p)privCols.forEach((c,k)=>{const i=CSV_COLS.indexOf(c);if(i>=0&&p[k]!=null&&p[k]!=='')fila[i]=String(p[k]);});
+    return fila;
+  });
+}
+
+async function cargar(){
+  const prog=document.getElementById('prog-fill'),lbl=document.getElementById('prog-label');
+  try{
+    prog.style.width='15%';lbl.textContent='Cargando agendas...';
+    const[base,priv]=await Promise.all([bajarBase(),bajarPrivado()]);
+    prog.style.width='60%';lbl.textContent='Clasificando agendas...';
+    await new Promise(r=>setTimeout(r));
+    allRows=armarFilas(base,priv).map(c=>{c._cat=clasificar(c);return c;});
+    prog.style.width='100%';
+    // Abajo del título solo se avisa si faltan los teléfonos (sin la contraseña)
+    document.getElementById('datos-info').textContent=priv?'':'Sin teléfonos: falta la contraseña del sitio';
     buildCircuitos();
     planData=null;
     buildDates();
     document.getElementById('main-section').style.display='block';
-    setTimeout(()=>{document.getElementById('prog-wrap').style.display='none';},600);
-  };
-  r.onerror=()=>showErr('Error leyendo el archivo.');
-  r.readAsText(file,'UTF-8');
+    setTimeout(()=>{document.getElementById('prog-wrap').style.display='none';},400);
+  }catch(err){showErr('No se pudieron cargar las agendas: '+err.message);}
 }
 function showErr(msg){document.getElementById('err-msg').textContent=msg;document.getElementById('err-msg').style.display='block';document.getElementById('prog-wrap').style.display='none';}
-
-document.getElementById('file-input').addEventListener('change',e=>{if(e.target.files[0])processFile(e.target.files[0]);});
-const zone=document.getElementById('upload-zone');
-zone.addEventListener('dragover',e=>{e.preventDefault();zone.classList.add('drag');});
-zone.addEventListener('dragleave',()=>zone.classList.remove('drag'));
-zone.addEventListener('drop',e=>{e.preventDefault();zone.classList.remove('drag');if(e.dataTransfer.files[0])processFile(e.dataTransfer.files[0]);});
+cargar();
 document.getElementById('date-select').addEventListener('change',e=>{if(e.target.value)renderPlan(e.target.value);});
 document.getElementById('btn-copy').addEventListener('click',()=>copyToClipboard(buildCopyHtml(),()=>showMsg('Copiado correctamente')));
 document.getElementById('btn-copy-h').addEventListener('click',()=>{
