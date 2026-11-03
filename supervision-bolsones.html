@@ -444,8 +444,10 @@ function preparar(json) {
     return r;
   });
   const gen = new Date(json.generado);
-  HOY = new Date(gen.getFullYear(), gen.getMonth(), gen.getDate());
-  HOYk = clave(HOY);
+  // "Hoy" va según el reloj de Montevideo: generado es la fecha más nueva de los datos,
+  // y a primera hora todavía no hay solicitudes del día (quedaba en ayer)
+  HOYk = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Montevideo' });
+  HOY = desdeClave(HOYk);
   // Atraso igual que la hoja "Atrasados": semanas desde el último día de
   // servicio del municipio anterior a hoy (si hoy es el día, cuenta el de la semana pasada).
   // A diferencia de la planilla, también cuentan las entregas y cambios (pedido del usuario).
