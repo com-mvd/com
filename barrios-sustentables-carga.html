@@ -83,6 +83,14 @@ label.l:first-of-type{margin-top:0}
 .clave-caja p{font-size:14px;color:var(--text2);margin:6px 0 16px}
 .clave-caja .err{color:var(--rojo);font-size:13px;font-weight:600;min-height:1.2em;margin-top:10px}
 .cargando{text-align:center;color:var(--text2);padding:30px 0;font-size:14px}
+/* Mientras se lee la planilla: solo la ruedita, igual que en com-mvd/dashboard y mb */
+.carga{min-height:max(260px,calc(100vh - 130px));display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:0 16px;text-align:center}
+.ruedita{width:38px;height:38px;border:3px solid #dbe3ed;border-top-color:#2563eb;border-radius:50%;animation:girar .8s linear infinite}
+@keyframes girar{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.ruedita{animation-duration:2.4s}}
+.carga-t{color:#64748b;font-size:14px;font-weight:600}
+.carga-t.error{color:var(--rojo)}
+.carga .btn{flex:none;padding:11px 22px;font-size:15px}
 </style>
 </head>
 <body>
@@ -93,6 +101,13 @@ label.l:first-of-type{margin-top:0}
     <label class="pasado" id="pasado" hidden>Pasado hasta <input type="date" id="inPasado"></label>
   </div>
 </header>
+
+<!-- Mientras se lee la planilla -->
+<div class="carga" id="pantallaCargando" role="status" aria-live="polite">
+  <div class="ruedita" id="ruedita"></div>
+  <div class="carga-t" id="cargaT">Cargando información</div>
+  <button class="btn" type="button" id="reintentar" hidden>Reintentar</button>
+</div>
 
 <!-- Clave de carga: se pide una sola vez por navegador -->
 <div class="wrap" id="pantallaClave" hidden>
@@ -182,15 +197,16 @@ async function pedir(datos) {
   leida = true;
   // No se pisa la fecha mientras se la está cambiando
   if (document.activeElement !== $('inPasado')) $('inPasado').value = r.marca || '';
-  $('pasado').hidden = false;
   dibujarLista();
   return r;
 }
 
+// cual: 'cargando' (ruedita), 'clave' o 'carga'
 function pantalla(cual) {
+  $('pantallaCargando').hidden = cual !== 'cargando';
   $('pantallaClave').hidden = cual !== 'clave';
   $('pantallaCarga').hidden = cual !== 'carga';
-  if (cual === 'clave') $('pasado').hidden = true;
+  $('pasado').hidden = cual !== 'carga';
   if (cual === 'clave') setTimeout(() => $('inClave').focus(), 50);
 }
 
@@ -305,9 +321,10 @@ $('formClave').onsubmit = async e => {
   $('errClave').textContent = '';
   clave = c;
   try {
-    pantalla('carga');
+    cargando();
     await pedir({ accion: 'listar' });
     guardarClave(c);
+    pantalla('carga');
   } catch (err) {
     clave = null;
     pantalla('clave');
@@ -315,14 +332,32 @@ $('formClave').onsubmit = async e => {
   }
 };
 
+function cargando() {
+  $('ruedita').hidden = false;
+  $('cargaT').textContent = 'Cargando información';
+  $('cargaT').className = 'carga-t';
+  $('reintentar').hidden = true;
+  pantalla('cargando');
+}
+
+// La página se muestra recién cuando llegó todo de la planilla (lista y "Pasado hasta")
 async function iniciar() {
   limpiarForm();
   clave = leerClave();
   if (!clave) return pantalla('clave');
-  pantalla('carga');
-  try { await pedir({ accion: 'listar' }); }
-  catch (err) { if (clave) $('lista').innerHTML = `<div class="vacio">No se pudo leer la planilla (${esc(err.message)})</div>`; }
+  cargando();
+  try {
+    await pedir({ accion: 'listar' });
+    pantalla('carga');
+  } catch (err) {
+    if (!clave) return; // clave incorrecta: pedir() ya mostró la pantalla de la clave
+    $('ruedita').hidden = true;
+    $('cargaT').textContent = 'No se pudo leer la planilla (' + err.message + ')';
+    $('cargaT').className = 'carga-t error';
+    $('reintentar').hidden = false;
+  }
 }
+$('reintentar').onclick = iniciar;
 iniciar();
 </script>
 </body>
