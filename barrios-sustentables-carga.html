@@ -11,24 +11,34 @@
 <style>
 /* Página de carga de Barrios Sustentables: Cerro. No está en la portada: se entra por link.
    Escribe en la planilla "Validación Barrios Sustentables" a través de su Apps Script, con la
-   clave de carga (se pide una vez y queda en este navegador). */
+   clave de carga (se pide una vez y queda en este navegador).
+   Mismo aspecto que barrios-sustentables-cerro.html (colores, fondo, barra, tarjetas, etiquetas, ruedita). */
 :root{
   --bg:#F7F6F3; --card:#FFFFFF; --border:#E6E2DA;
   --text:#1A1714; --text2:#5F5A54; --text3:#9A948C;
   --azul:#1b3f74; --rojo:#c0392b; --verde:#1baf7a;
   --shadow:0 4px 20px rgba(26,23,20,.05),0 1px 3px rgba(26,23,20,.05);
+  --r:16px;
 }
 *{box-sizing:border-box;margin:0;padding:0}
 [hidden]{display:none!important}
-body{font-family:'DM Sans',system-ui,sans-serif;color:var(--text);-webkit-font-smoothing:antialiased;background:var(--bg);min-height:100vh}
+body{font-family:'DM Sans',system-ui,sans-serif;color:var(--text);-webkit-font-smoothing:antialiased;
+  background:radial-gradient(circle at 12% 0%,#EDEEF9 0%,transparent 40%),radial-gradient(circle at 95% 100%,#E7F3EE 0%,transparent 40%),var(--bg);
+  background-attachment:fixed;min-height:100vh}
 button,input,select{font:inherit;color:inherit}
 .num{font-variant-numeric:tabular-nums}
 
-.barra{position:sticky;top:0;z-index:10;background:linear-gradient(135deg,#0f172a 0%,#16213e 55%,#1b3f74 100%);color:#fff;box-shadow:0 4px 12px rgba(0,0,0,.25);padding-top:env(safe-area-inset-top)}
+.barra{position:sticky;top:0;z-index:10;background:linear-gradient(135deg,#0f172a 0%,#16213e 55%,#1b3f74 100%);color:#fff;box-shadow:0 4px 12px rgba(0,0,0,.3);padding-top:env(safe-area-inset-top)}
 .barra-in{max-width:560px;margin:0 auto;padding:14px 16px;display:flex;justify-content:center}
 /* Título y "Pasado hasta" del mismo ancho (el del título), centrados */
 .cabeza{position:relative;display:grid;gap:9px;width:max-content;max-width:100%}
-.barra h1{font-family:'Segoe UI',Arial,sans-serif;font-size:19px;font-weight:700;line-height:1.2;text-align:center}
+.titulo{display:flex;align-items:center;justify-content:center;gap:10px;min-width:0}
+.titulo .ico{display:flex;align-items:center;justify-content:center;flex-shrink:0;width:28px;height:28px;font-family:'Segoe UI Emoji','Apple Color Emoji','Noto Color Emoji',sans-serif;font-size:23px;line-height:28px}
+.titulo h1{font-family:'Segoe UI',Arial,sans-serif;font-size:24px;font-weight:700;letter-spacing:-.01em;line-height:1.15;text-align:center}
+@media (max-width:760px){
+  .titulo h1{font-size:19px}
+  .titulo .ico{width:24px;height:24px;font-size:19px;line-height:24px}
+}
 /* "Pasado hasta": hasta qué fecha ya se cargó lo del grupo (se guarda en el Apps Script) */
 .pasado{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:rgba(255,255,255,.85);white-space:nowrap}
 .pasado input{flex:1;min-width:0;width:100%;font:inherit;font-size:14px;font-weight:700;text-align:center;color:#fff;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.35);border-radius:9px;padding:5px 9px;color-scheme:dark;outline:none}
@@ -42,10 +52,10 @@ button,input,select{font:inherit;color:inherit}
 @media (max-width:600px){.estado .tx{display:none}.estado{left:calc(100% + 6px)}}
 
 .wrap{max-width:560px;margin:0 auto;padding:16px 16px 40px;display:flex;flex-direction:column;gap:14px}
-.card{background:var(--card);border:1px solid var(--border);border-radius:16px;box-shadow:var(--shadow);padding:16px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--r);box-shadow:var(--shadow);padding:16px}
 .card h2{font-size:15px;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:8px}
 
-label.l{display:block;font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.05em;margin:14px 0 6px}
+label.l{display:block;font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.06em;margin:14px 0 6px}
 label.l:first-of-type{margin-top:0}
 .in{width:100%;font-size:16px;padding:12px 13px;border:1px solid var(--border);border-radius:11px;background:#fff;outline:none}
 .in:focus{border-color:var(--azul);box-shadow:0 0 0 3px rgba(27,63,116,.12)}
@@ -57,7 +67,7 @@ input[type=datetime-local].in::-webkit-date-and-time-value{text-align:left}
 /* Edificio: tres botones grandes */
 .lugares{display:grid;gap:8px}
 .lugar{display:flex;align-items:center;gap:10px;text-align:left;padding:12px 13px;border:1.5px solid var(--border);border-radius:12px;background:#fff;font-size:15px;font-weight:600;cursor:pointer}
-.lugar i{width:12px;height:12px;border-radius:50%;background:var(--c);flex:none}
+.lugar i{width:11px;height:11px;border-radius:50%;background:var(--c);flex:none}
 .lugar.on{border-color:var(--c);background:color-mix(in srgb,var(--c) 10%,#fff)}
 
 /* Bolsones: − número + */
@@ -110,7 +120,7 @@ input[type=datetime-local].in::-webkit-date-and-time-value{text-align:left}
 <header class="barra">
   <div class="barra-in">
     <div class="cabeza">
-      <h1>Carga Barrios Sustentables Cerro</h1>
+      <div class="titulo"><span class="ico" aria-hidden="true">♻</span><h1>Carga Barrios Sustentables Cerro</h1></div>
       <div class="pasado" id="pasado" hidden><label for="inPasado">Pasado hasta</label><input type="date" id="inPasado"></div>
       <span class="estado" id="estadoPasado" aria-live="polite"></span>
     </div>
