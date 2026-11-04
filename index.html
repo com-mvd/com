@@ -90,7 +90,7 @@ body.bloqueado .cover{visibility:hidden}
 <script src="assets/llave.js"></script>
 <script>
 // Un cuadro por servicio. Cada servicio tiene UNA base de datos que comparten todas sus páginas:
-//   base:    archivo JSON que leen las páginas del servicio (con un campo "generado" = fecha de la copia).
+//   base:    archivo JSON (o .json.gz) que leen las páginas del servicio (con un campo "generado" = fecha del último dato).
 //   webhook: dirección de n8n que regenera esa base. Mientras sea null, el botón solo vuelve a leer la copia.
 // Para agregar una página: copiar el .html al lado de este index.html y sumar una línea en "paginas" de su servicio.
 // Las bases están en el repo com-mvd/bases (sin historial, para que no crezca) y las sube el n8n de la PC del COM,
@@ -103,18 +103,18 @@ const SERVICIOS = [
       { nombre: 'Supervisión de Bolsones', archivo: 'supervision-bolsones.html' },
     ] },
   { id: 'agenda', nombre: 'Agenda', color: 'blue',
-    base: BASES + 'agenda.json', webhook: 'https://blatancy-scouting-virtuous.ngrok-free.dev/webhook/agenda-actualizar',
+    base: BASES + 'agenda.json.gz', webhook: 'https://blatancy-scouting-virtuous.ngrok-free.dev/webhook/agenda-actualizar',
     paginas: [
       { nombre: 'Planificador de Agenda', archivo: 'planificador-agenda.html' },
     ] },
   { id: 'zona-limpia', nombre: 'Zona Limpia', color: 'teal',
-    base: BASES + 'zona-limpia.json', webhook: 'https://blatancy-scouting-virtuous.ngrok-free.dev/webhook/zona-limpia-actualizar',
+    base: BASES + 'zona-limpia.json.gz', webhook: 'https://blatancy-scouting-virtuous.ngrok-free.dev/webhook/zona-limpia-actualizar',
     paginas: [
       { nombre: 'Trazador de recorridos intradomiciliarios', archivo: 'trazador-recorridos.html' },
       { nombre: 'Generador de informes intradomiciliarios', archivo: 'generador-informes.html' },
     ] },
   { id: 'reclamos', nombre: 'Reclamos', color: 'teal',
-    base: BASES + 'reclamos.json', webhook: 'https://blatancy-scouting-virtuous.ngrok-free.dev/webhook/reclamos-actualizar',
+    base: BASES + 'reclamos.json.gz', webhook: 'https://blatancy-scouting-virtuous.ngrok-free.dev/webhook/reclamos-actualizar',
     paginas: [] },
 ];
 
@@ -201,7 +201,12 @@ async function leerBase(s, sec) {
     if (subida) { mostrar(est, 'Actualizado ' + subida); return; }
     const res = await fetch(s.base + '?t=' + Date.now(), { cache: 'no-store' });
     if (!res.ok) throw new Error('HTTP ' + res.status);
-    mostrar(est, ultima((await res.json()).generado));
+    // Agenda, Zona Limpia y Reclamos están comprimidas (.json.gz): gzip empieza con 1f 8b
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    const texto = bytes[0] === 0x1f && bytes[1] === 0x8b
+      ? await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'))).text()
+      : new TextDecoder().decode(bytes);
+    mostrar(est, ultima(JSON.parse(texto).generado));
   } catch (e) {
     mostrar(est, 'No se pudo leer la base', true);
   }
