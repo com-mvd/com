@@ -25,22 +25,34 @@ button,input,select{font:inherit;color:inherit}
 .num{font-variant-numeric:tabular-nums}
 
 .barra{position:sticky;top:0;z-index:10;background:linear-gradient(135deg,#0f172a 0%,#16213e 55%,#1b3f74 100%);color:#fff;box-shadow:0 4px 12px rgba(0,0,0,.25);padding-top:env(safe-area-inset-top)}
-.barra-in{max-width:560px;margin:0 auto;padding:14px 16px;display:flex;flex-direction:column;align-items:center;gap:9px}
+.barra-in{max-width:560px;margin:0 auto;padding:14px 16px;display:flex;justify-content:center}
+/* Título y "Pasado hasta" del mismo ancho (el del título), centrados */
+.cabeza{position:relative;display:grid;gap:9px;width:max-content;max-width:100%}
 .barra h1{font-family:'Segoe UI',Arial,sans-serif;font-size:19px;font-weight:700;line-height:1.2;text-align:center}
 /* "Pasado hasta": hasta qué fecha ya se cargó lo del grupo (se guarda en el Apps Script) */
-.pasado{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:rgba(255,255,255,.85)}
-.pasado input{font:inherit;font-size:14px;font-weight:700;color:#fff;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.35);border-radius:9px;padding:5px 9px;color-scheme:dark;outline:none}
+.pasado{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:rgba(255,255,255,.85);white-space:nowrap}
+.pasado input{flex:1;min-width:0;width:100%;font:inherit;font-size:14px;font-weight:700;text-align:center;color:#fff;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.35);border-radius:9px;padding:5px 9px;color-scheme:dark;outline:none}
 .pasado input:focus{border-color:#fff}
+.pasado input::-webkit-date-and-time-value{text-align:center}
+/* Estado al guardar la fecha: a la derecha, sin correr nada (ruedita + "Cargando…", después tilde verde) */
+.estado{position:absolute;left:calc(100% + 10px);bottom:0;height:30px;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;color:rgba(255,255,255,.85);white-space:nowrap}
+.estado .rd{width:14px;height:14px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:girar .8s linear infinite}
+.estado .ok{color:#3ddc97;font-size:20px;font-weight:700;line-height:1}
+/* En el celular no entra el texto al costado: queda solo la ruedita y el tilde */
+@media (max-width:600px){.estado .tx{display:none}.estado{left:calc(100% + 6px)}}
 
 .wrap{max-width:560px;margin:0 auto;padding:16px 16px 40px;display:flex;flex-direction:column;gap:14px}
 .card{background:var(--card);border:1px solid var(--border);border-radius:16px;box-shadow:var(--shadow);padding:16px}
 .card h2{font-size:15px;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:8px}
-.card h2 .acc{margin-left:auto;font-size:13px;font-weight:600;color:var(--azul);background:none;border:0;cursor:pointer}
 
 label.l{display:block;font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.05em;margin:14px 0 6px}
 label.l:first-of-type{margin-top:0}
 .in{width:100%;font-size:16px;padding:12px 13px;border:1px solid var(--border);border-radius:11px;background:#fff;outline:none}
 .in:focus{border-color:var(--azul);box-shadow:0 0 0 3px rgba(27,63,116,.12)}
+/* iOS les pone a los campos de fecha un ancho mínimo propio y se salen del recuadro */
+input[type=datetime-local].in{display:block;min-width:0;max-width:100%;min-height:49px}
+input[type=datetime-local].in::-webkit-date-and-time-value{text-align:left}
+@supports (-webkit-touch-callout:none){input[type=datetime-local].in{-webkit-appearance:none;appearance:none}}
 
 /* Edificio: tres botones grandes */
 .lugares{display:grid;gap:8px}
@@ -97,8 +109,11 @@ label.l:first-of-type{margin-top:0}
 
 <header class="barra">
   <div class="barra-in">
-    <h1>Carga Barrios Sustentables Cerro</h1>
-    <label class="pasado" id="pasado" hidden>Pasado hasta <input type="date" id="inPasado"></label>
+    <div class="cabeza">
+      <h1>Carga Barrios Sustentables Cerro</h1>
+      <div class="pasado" id="pasado" hidden><label for="inPasado">Pasado hasta</label><input type="date" id="inPasado"></div>
+      <span class="estado" id="estadoPasado" aria-live="polite"></span>
+    </div>
   </div>
 </header>
 
@@ -144,7 +159,7 @@ label.l:first-of-type{margin-top:0}
   </form>
 
   <section class="card">
-    <h2>Cargados <button class="acc" type="button" id="refrescar">Actualizar</button></h2>
+    <h2>Cargados</h2>
     <div id="lista"><div class="cargando">Cargando…</div></div>
     <button class="mas" type="button" id="verMas" hidden>Ver más</button>
   </section>
@@ -303,14 +318,21 @@ function dibujarLista() {
   });
 }
 $('verMas').onclick = () => { mostrar += POR_PAGINA; dibujarLista(); };
-$('refrescar').onclick = async () => {
-  try { await pedir({ accion: 'listar' }); aviso('Lista actualizada'); } catch (err) { aviso(err.message, true); }
-};
 
 // "Pasado hasta": se guarda apenas se elige la fecha
+let estadoT;
 $('inPasado').onchange = async () => {
-  try { await pedir({ accion: 'marca', valor: $('inPasado').value }); aviso($('inPasado').value ? 'Fecha guardada' : 'Fecha borrada'); }
-  catch (err) { aviso(err.message, true); }
+  const est = $('estadoPasado');
+  clearTimeout(estadoT);
+  est.innerHTML = '<span class="rd"></span><span class="tx">Cargando…</span>';
+  try {
+    await pedir({ accion: 'marca', valor: $('inPasado').value });
+    est.innerHTML = '<span class="ok" aria-label="Guardado">✓</span>';
+    estadoT = setTimeout(() => est.innerHTML = '', 2000);
+  } catch (err) {
+    est.innerHTML = '';
+    aviso(err.message, true);
+  }
 };
 
 // ── Inicio ──────────────────────────────────────────────────────────────────
