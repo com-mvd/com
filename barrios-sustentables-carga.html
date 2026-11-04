@@ -157,7 +157,8 @@ const fLinda = s => s ? `${s.slice(8, 10)}/${s.slice(5, 7)}/${s.slice(0, 4)} ${s
 // Ahora en Montevideo, en el formato del campo de fecha
 const ahora = () => new Date().toLocaleString('sv-SE', { timeZone: 'America/Montevideo' }).slice(0, 16).replace(' ', 'T');
 
-let clave = null, filas = [], editando = null, mostrar = POR_PAGINA, lugarElegido = null;
+// leida: si ya llegó la lista de la planilla (antes de eso se muestra "Cargando…")
+let clave = null, filas = [], leida = false, editando = null, mostrar = POR_PAGINA, lugarElegido = null;
 
 function leerClave() { try { return localStorage.getItem(GUARDADA); } catch { return null; } }
 function guardarClave(c) { try { c ? localStorage.setItem(GUARDADA, c) : localStorage.removeItem(GUARDADA); } catch { } }
@@ -178,6 +179,7 @@ async function pedir(datos) {
   if (!r.ok && r.error === 'clave') { guardarClave(null); clave = null; pantalla('clave'); throw new Error('Clave de carga incorrecta'); }
   if (!r.ok) throw new Error(r.error || 'Error');
   filas = r.filas;
+  leida = true;
   // No se pisa la fecha mientras se la está cambiando
   if (document.activeElement !== $('inPasado')) $('inPasado').value = r.marca || '';
   $('pasado').hidden = false;
@@ -266,7 +268,7 @@ function dibujarLista() {
       <div class="t"><b>${esc(f.edif || 'Sin edificio')}</b><span class="num">${fLinda(f.fGes)}</span></div>
       <div class="n num${f.cant ? '' : ' cero'}">${f.cant ?? '–'}</div>
       <div class="acc"><button type="button" data-n="${f.n}" data-a="e">Editar</button><button type="button" class="borrar" data-n="${f.n}" data-a="b">Borrar</button></div>
-    </div>`).join('') : '<div class="vacio">Todavía no hay cargas</div>';
+    </div>`).join('') : `<div class="vacio">${leida ? 'Todavía no hay cargas' : 'Cargando…'}</div>`;
   $('verMas').hidden = orden.length <= mostrar;
   $('lista').querySelectorAll('button').forEach(b => b.onclick = async () => {
     const f = filas.find(x => x.n === +b.dataset.n);
