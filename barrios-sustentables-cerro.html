@@ -4,12 +4,11 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-<title>COM</title>
+<title>Barrios Sustentables: Cerro</title>
 <link rel="icon" type="image/png" href="assets/logo-ciemsa.png">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-<script src="assets/llave.js"></script>
 <style>
 /* Mismo aspecto que supervision-bolsones.html */
 :root{
@@ -127,12 +126,17 @@ body{font-family:'DM Sans',system-ui,sans-serif;color:var(--text);-webkit-font-s
 // ── Barrios Sustentables Cerro ──────────────────────────────────────────────
 // Lee la base pública de Bolsones (com-mvd/bases/bolsones.json, últimos 90 días) y se queda con las
 // solicitudes de estos edificios (columna EDIFICIO; sin importar mayúsculas ni tildes).
-// Para sumar un lugar: agregar { nombre, edif, color } a LUGARES.
+// Los vaciados se piden y se confirman en el grupo de WhatsApp, y se cargan a mano en la planilla
+// "Validación Barrios Sustentables" (Apps Script en Desktop/IA/barrios-sustentables). API_URL es su
+// aplicación web y devuelve las filas con edificio, fecha y bolsones > 0.
+// Si API_URL está vacía, se lee la base de Bolsones directo (como antes de la planilla).
+// Para sumar un lugar: agregar { nombre, edif, dir, pos, color } a LUGARES (y el nombre en el Apps Script).
+const API_URL = 'https://script.google.com/macros/s/AKfycbwgeDkIdZ6AUPGR_4dQS3Z24QTRThqk_9qDoi-1NTPiySEqbty06Bmo7E4U2b-KS9Em1g/exec';
 const FUENTE = 'https://com-mvd.github.io/bases/bolsones.json';
 const LUGARES = [
-  { nombre: 'Plaza Débora Céspedes', edif: 'plaza debora cespedes', color: '#1baf7a' },
-  { nombre: 'Federación FOICA', edif: 'federacion foica', color: '#2a78d6' },
-  { nombre: 'Plaza de Deportes N11', edif: 'plaza de deportes n11', color: '#eb6834' },
+  { nombre: 'Plaza Débora Céspedes', edif: 'plaza debora cespedes', dir: 'EGIPTO esq. SUECIA', pos: [-34.881884, -56.24755], color: '#1baf7a' },
+  { nombre: 'Federación FOICA', edif: 'federacion foica', dir: 'HOLANDA 1715', pos: [-34.884961, -56.249596], color: '#2a78d6' },
+  { nombre: 'Plaza de Deportes N11', edif: 'plaza de deportes n11', dir: 'PORTUGAL esq. AUSTRIA', pos: [-34.881595, -56.252055], color: '#eb6834' },
 ];
 const CARTO_KEY = 'cb1_4dpf_1_b2ca9299be611862d5d23c88';
 
@@ -145,32 +149,31 @@ const fFecha = d => d ? `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFul
 const fHora = d => d ? `${fFecha(d)} ${pad(d.getHours())}:${pad(d.getMinutes())}` : '';
 const porEdif = new Map(LUGARES.map(l => [l.edif, l]));
 
-function preparar(json) {
+// Cada fila queda como { lugar, fGesD, cant }: solo las que tienen gestión y algún bolsón,
+// de la más nueva a la más vieja
+const ordenar = filas => filas.filter(r => r.lugar && r.fGesD && r.cant > 0).sort((a, b) => b.fGesD - a.fGesD);
+
+// Planilla: { filas: [{ edif, fGes, cant }] }
+const prepararValidadas = json => ordenar(json.filas.map(f => ({
+  lugar: porEdif.get(norm(f.edif)), fGesD: f.fGes ? new Date(f.fGes) : null, cant: Number(f.cant),
+})));
+
+// Base de Bolsones directo, sin validar. La cantidad sale de "Cantidad transportada" (cantT)
+function prepararBase(json) {
   const ix = Object.fromEntries(json.columnas.map((c, i) => [c, i]));
-  const filas = [];
-  for (const a of json.registros) {
-    const lugar = porEdif.get(norm(a[ix.edif]));
-    if (!lugar) continue;
-    const r = { lugar };
-    for (const c in ix) r[c] = a[ix[c]];
-    r.fGesD = r.fGes ? new Date(r.fGes) : null;
-    filas.push(r);
-  }
-  // Solo las que ya tienen gestión y con algún bolsón (las de 0 no cuentan), de la más nueva a la más vieja
-  return filas.filter(r => r.fGesD && r.cantB > 0).sort((a, b) => b.fGesD - a.fGesD);
+  return ordenar(json.registros.map(a => ({
+    lugar: porEdif.get(norm(a[ix.edif])), fGesD: a[ix.fGes] ? new Date(a[ix.fGes]) : null, cant: a[ix.cantT],
+  })));
 }
 
 function render(G) {
-  // Cuentas por lugar (lat/lng de la última solicitud con coordenadas)
+  // Cuentas por lugar
   for (const l of LUGARES) {
     const g = G.filter(r => r.lugar === l);
-    const conPos = g.find(r => r.lat && r.lng);
     Object.assign(l, {
       n: g.length,
-      bolsones: g.reduce((s, r) => s + (r.cantB || 0), 0),
+      bolsones: g.reduce((s, r) => s + r.cant, 0),
       ultima: g[0]?.fGesD || null,
-      dir: g[0]?.dir || '',
-      pos: conPos ? [conPos.lat, conPos.lng] : null,
     });
   }
 
@@ -181,22 +184,18 @@ function render(G) {
     maxNativeZoom: 18, maxZoom: 20, subdomains: 'abcd',
   }).addTo(mapa);
   for (const l of LUGARES) {
-    if (!l.pos) continue;
     // Solo marcan el lugar: sin ventanitas ni clic
     L.circleMarker(l.pos, { radius: 11, color: '#fff', weight: 3, fillColor: l.color, fillOpacity: 1, interactive: false })
       .addTo(mapa);
   }
-  const pos = LUGARES.filter(l => l.pos).map(l => l.pos);
   // Encuadra los puntos y se aleja un paso de la rueda, para que se vea más del barrio
-  if (pos.length) {
-    mapa.fitBounds(pos, { padding: [70, 70], maxZoom: 16.5, animate: false });
-    mapa.setZoom(mapa.getZoom() - 1, { animate: false });
-  }
+  mapa.fitBounds(LUGARES.map(l => l.pos), { padding: [70, 70], maxZoom: 16.5, animate: false });
+  mapa.setZoom(mapa.getZoom() - 1, { animate: false });
   // Referencia de colores: solo informativa, no filtra
   $('ley').innerHTML = LUGARES.map(l => `<span class="lg" style="--c:${l.color}"><i></i>${esc(l.nombre)}</span>`).join('');
 
   // Indicadores generales
-  const total = G.reduce((s, r) => s + (r.cantB || 0), 0);
+  const total = G.reduce((s, r) => s + r.cant, 0);
   const kpis = [
     ['Bolsones vaciados', fmt(total)],
     ['Solicitudes realizadas', fmt(G.length)],
@@ -205,31 +204,31 @@ function render(G) {
 
   // Por punto
   $('puntos').innerHTML = LUGARES.map(l => `<div class="card punto" style="--c:${l.color}">
-      <h3>${esc(l.nombre)}</h3><div class="dir">${esc(l.dir || 'Sin solicitudes en los últimos 90 días')}</div>
+      <h3>${esc(l.nombre)}</h3><div class="dir">${esc(l.dir)}</div>
       <dl><dt>Solicitudes realizadas</dt><dd class="num">${l.n}</dd>
       <dt>Bolsones vaciados</dt><dd class="num">${fmt(l.bolsones)}</dd>
       <dt>Última gestión</dt><dd class="num">${l.ultima ? fHora(l.ultima) : '—'}</dd></dl></div>`).join('');
 
   // Detalle
-  $('nota').textContent = 'Últimos 90 días';
+  $('nota').textContent = API_URL ? '' : 'Últimos 90 días';
   $('tabla').innerHTML = `<thead><tr><th>Edificio</th><th>Fecha de gestión</th><th class="c">Cantidad bolsones</th></tr></thead><tbody>${
     G.length ? G.map(r => `<tr>
       <td><span class="ed"><i class="pt" style="--c:${r.lugar.color}"></i>${esc(r.lugar.nombre)}</span></td>
       <td class="num">${fHora(r.fGesD)}</td>
-      <td class="num n">${r.cantB != null ? fmt(r.cantB) : ''}</td></tr>`).join('')
-    : '<tr><td colspan="3" class="vacio">No hay gestiones en estos puntos</td></tr>'}</tbody>`;
+      <td class="num n">${fmt(r.cant)}</td></tr>`).join('')
+    : `<tr><td colspan="3" class="vacio">${API_URL ? 'Todavía no hay solicitudes cargadas' : 'No hay solicitudes en estos puntos'}</td></tr>`}</tbody>`;
 }
 
 async function cargar() {
   try {
-    // La contraseña del sitio se pone una vez en la portada; si se entra directo, se pide acá
-    await COMLlave.obtener('https://com-mvd.github.io/bases/llave.json').catch(() => {});
-    const res = await fetch(FUENTE + '?t=' + Date.now(), { cache: 'no-store' });
+    // Sin contraseña: se comparte por link con quien lo quiera ver (no tiene datos personales)
+    const res = API_URL ? await fetch(API_URL) : await fetch(FUENTE + '?t=' + Date.now(), { cache: 'no-store' });
     if (!res.ok) throw new Error('HTTP ' + res.status);
-    render(preparar(await res.json()));
+    const json = await res.json();
+    render(API_URL ? prepararValidadas(json) : prepararBase(json));
     $('cargador').hidden = true;
   } catch (err) {
-    $('cargador').textContent = 'No se pudo cargar la base de Bolsones (' + err.message + ')';
+    $('cargador').textContent = 'No se pudieron cargar las solicitudes (' + err.message + ')';
   }
 }
 cargar();
