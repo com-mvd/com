@@ -999,16 +999,16 @@ function renderSeguimiento(v) {
 
 // Detalle de gestiones: mismas columnas y en el mismo orden que la hoja "Seguimiento gestiones".
 // La usan Operación del día, Informe realizados y el Buscador de dirección.
-// conSolicitud: suma "Fecha de solicitud" después de la dirección (solo el Buscador, con el año porque
-// ahí aparecen solicitudes de cualquier momento)
+// conSolicitud: suma "Edificio" y "Fecha de solicitud" después de la dirección (solo el Buscador; la
+// fecha con el año porque ahí aparecen solicitudes de cualquier momento)
 function tablaGestiones(id, G, vacio, conSolicitud = false) {
   const transp = r => r.transp === '-' ? '' : nomTransp(r.transp);
-  const cab = ['Municipio', 'Dirección completa', ...(conSolicitud ? ['Fecha de solicitud'] : []), 'Datos de solicitud', 'Gestión', 'Cantidad bolsones', 'Tipo bolsón', 'Fecha de gestión', 'Observaciones', 'Transportista', 'Planta', 'Cantidad transportada', 'Hora'];
+  const cab = ['Municipio', 'Dirección completa', ...(conSolicitud ? ['Edificio', 'Fecha de solicitud'] : []), 'Datos de solicitud', 'Gestión', 'Cantidad bolsones', 'Tipo bolsón', 'Fecha de gestión', 'Observaciones', 'Transportista', 'Planta', 'Cantidad transportada', 'Hora'];
   const fSol = d => d ? `${fCorta(d)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}` : '';
   $(id).innerHTML = `<thead><tr>${cab.map(c => `<th>${c}</th>`).join('')}</tr></thead><tbody>${G.length ? G.map(r => `<tr>
       <td>${chipMuni(r.mun)}</td>
       <td class="dir">${esc(r.dir)}</td>
-      ${conSolicitud ? `<td class="hora">${fSol(r.fSolD)}</td>` : ''}
+      ${conSolicitud ? `<td class="obs">${esc(r.edif)}</td><td class="hora">${fSol(r.fSolD)}</td>` : ''}
       <td class="desc">${esc(r.nota)}</td>
       <td>${esc(r.gestion)}</td>
       <td class="num">${r.cantB != null ? fmt(r.cantB) : ''}</td>
@@ -1029,21 +1029,43 @@ function tablaGestiones(id, G, vacio, conSolicitud = false) {
 const BUS_MAX = 12; // opciones en la lista
 let busOpc = [], busSel = -1;
 
-// Direcciones distintas que coinciden con lo escrito, con sus edificios y cuántas solicitudes tiene cada una
+// En una misma dirección puede haber edificios distintos: cada uno va como opción aparte.
+// claveEdif junta las formas de escribir el mismo nombre ("Spazio IV" = "EDIFICIO SPAZIO IV").
+// Si el edificio está vacío, es solo "Edificio" o repite la dirección, queda sin nombre ('').
+const limpiarEdif = s => norm(s).replace(/[^a-z0-9ñ]+/g, ' ').replace(/\b(edificio|edficio|edif|ed)\b/g, ' ').replace(/\s+/g, ' ').trim();
+function claveEdif(r) {
+  const e = limpiarEdif(r.edif);
+  return !e || limpiarEdif(r.dir).includes(e) ? '' : e;
+}
+
+// Direcciones (y edificios) que coinciden con lo escrito, con cuántas solicitudes tiene cada una
 function opcionesBuscador(texto) {
-  const q = norm(texto).split(/\s+/).filter(Boolean);
+  const q = norm(texto).split(/[\s·]+/).filter(Boolean);
   if (q.join('').length < 3) return [];
   const porDir = new Map();
   for (const r of base()) {
     if (!r.dir || !q.every(w => norm(r.dir + ' ' + r.edif).includes(w))) continue;
-    const o = porDir.get(r.dir) || { dir: r.dir, mun: r.mun, edif: new Set(), n: 0 };
-    if (r.edif && norm(r.edif) !== norm(r.dir)) o.edif.add(r.edif);
+    const clave = r.dir + '|' + claveEdif(r);
+    const o = porDir.get(clave) || { dir: r.dir, clave: claveEdif(r), mun: r.mun, nombres: new Map(), n: 0 };
+    // Como nombre se muestra la forma más usada
+    if (o.clave) o.nombres.set(r.edif, (o.nombres.get(r.edif) || 0) + 1);
     o.n++;
-    porDir.set(r.dir, o);
+    porDir.set(clave, o);
   }
-  // Primero las que empiezan con lo escrito y después las de más solicitudes
+  const ops = [...porDir.values()];
+  // Cuántos edificios distintos hay en cada dirección, para avisar en las que tienen más de uno
+  const edifPorDir = new Map();
+  for (const o of ops) {
+    o.edif = o.clave ? [...o.nombres].sort((a, b) => b[1] - a[1])[0][0] : '';
+    edifPorDir.set(o.dir, (edifPorDir.get(o.dir) || 0) + 1);
+  }
+  for (const o of ops) o.varios = edifPorDir.get(o.dir) > 1;
+  // Primero las que empiezan con lo escrito y después las de más solicitudes;
+  // los edificios de una misma dirección quedan juntos
   const empieza = o => norm(o.dir).startsWith(q[0]) ? 0 : 1;
-  return [...porDir.values()].sort((a, b) => empieza(a) - empieza(b) || b.n - a.n || a.dir.localeCompare(b.dir));
+  const totDir = new Map();
+  for (const o of ops) totDir.set(o.dir, (totDir.get(o.dir) || 0) + o.n);
+  return ops.sort((a, b) => empieza(a) - empieza(b) || totDir.get(b.dir) - totDir.get(a.dir) || a.dir.localeCompare(b.dir) || b.n - a.n);
 }
 
 function listaBuscador() {
@@ -1051,7 +1073,10 @@ function listaBuscador() {
   busSel = -1;
   const ver = busOpc.slice(0, BUS_MAX);
   $('busLista').innerHTML = !busOpc.length ? (norm($('busQ').value).replace(/\s/g, '').length >= 3 ? '<div class="bus-nada">No se encontró esa dirección</div>' : '')
-    : ver.map((o, i) => `<button type="button" data-i="${i}">${chipMuni(o.mun)}<span class="bus-dir">${esc(o.dir)}${o.edif.size ? `<small>${esc([...o.edif].join(' · '))}</small>` : ''}</span><b class="num">${o.n}</b></button>`).join('')
+    : ver.map((o, i) => {
+        const edif = o.edif || (o.varios ? 'Sin nombre de edificio' : '');
+        return `<button type="button" data-i="${i}">${chipMuni(o.mun)}<span class="bus-dir">${esc(o.dir)}${edif ? `<small>${esc(edif)}</small>` : ''}</span><b class="num">${o.n}</b></button>`;
+      }).join('')
       + (busOpc.length > BUS_MAX ? `<div class="bus-nada">y ${busOpc.length - BUS_MAX} más: seguí escribiendo</div>` : '');
   $('busLista').hidden = !$('busLista').innerHTML;
   $('busLista').querySelectorAll('button').forEach(b => b.onmousedown = e => { e.preventDefault(); elegirDir(busOpc[+b.dataset.i]); });
@@ -1059,7 +1084,8 @@ function listaBuscador() {
 
 function elegirDir(o) {
   st.busDir = o.dir;
-  $('busQ').value = o.dir;
+  st.busEdif = o.clave;
+  $('busQ').value = o.dir + (o.edif ? ' · ' + o.edif : '');
   $('busLista').hidden = true;
   renderBuscador();
 }
@@ -1069,7 +1095,7 @@ function renderBuscador() {
   $('busTabla').parentElement.hidden = !st.busDir;
   if (!st.busDir) { $('busTot').textContent = ''; return; }
   // De la solicitud más vieja a la más nueva
-  const R = base().filter(r => r.dir === st.busDir).sort((a, b) => (a.fSolD || 0) - (b.fSolD || 0));
+  const R = base().filter(r => r.dir === st.busDir && claveEdif(r) === st.busEdif).sort((a, b) => (a.fSolD || 0) - (b.fSolD || 0));
   $('busTot').innerHTML = `<b class="num">${R.length}</b> ${R.length === 1 ? 'solicitud' : 'solicitudes'}`;
   tablaGestiones('busTabla', R, 'No hay solicitudes en esa dirección', true);
 }
