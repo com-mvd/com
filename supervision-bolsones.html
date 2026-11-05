@@ -503,29 +503,29 @@ function renderSemana(C) {
 }
 
 // ── ficha de un punto del mapa ──────────────────────────────────────────────
+// Operación del día e Informe realizados. Arriba de la línea, igual que la ficha de Pendientes
+// (dirección, edificio y tipo, municipio en su renglón); abajo, el estado, la fecha de gestión y el
+// transportista (pedido del 05/11)
 function fichaHTML(r) {
   const estado = r.estado === 'Nuevo' && r.semanas >= 1 ? ['Atrasado ' + (r.semanas >= 4 ? '4+ sem.' : r.semanas + ' sem.'), COL.atr, '#F9E1E0']
     : r.estado === 'Nuevo' ? ['Nuevo', COL.pend, '#FCE9DF']
     : r.estado === 'Asignado' ? ['Asignado', COL.asig, '#E1ECFA'] : [r.estado, '#0f7a55', '#DDF3EA'];
   const fila = (k, v) => v || v === 0 ? `<dt>${k}</dt><dd>${esc(v)}</dd>` : '';
-  const dias = r.fSolD ? diasEntre(desdeClave(r.solK), r.fGesD ? desdeClave(r.gesK) : HOY) : null;
+  const transp = r.transp === '-' ? '' : nomTransp(r.transp);
+  const datos = fila('Fecha de gestión', r.fGesD ? fHora(r.fGesD) : '') + fila('Transportista', transp);
+  return fichaArriba(r) + `
+    <div style="margin-bottom:.5rem"><span class="est" style="--c:${estado[1]};--bg-c:${estado[2]}">${esc(estado[0])}</span></div>
+    ${datos ? `<dl>${datos}</dl>` : ''}`;
+}
+
+// Lo de arriba de la línea gris, igual en todas las fichas: dirección, edificio y tipo, y el municipio
+function fichaArriba(r) {
+  const edif = [r.edif && norm(r.edif) !== norm(r.dir) ? r.edif : '', r.tipoEdif].filter(Boolean).join(' · ');
   return `<button class="ficha-x" aria-label="Cerrar">×</button>
     <h3>${esc(r.dir)}</h3>
-    <div class="sub">${esc(r.edif && norm(r.edif) !== norm(r.dir) ? r.edif + ' · ' : '')}${esc(r.tipoEdif)} · Municipio ${chipMuni(r.mun)}</div>
-    <hr>
-    <div style="margin-bottom:.5rem"><span class="est" style="--c:${estado[1]};--bg-c:${estado[2]}">${esc(estado[0])}</span></div>
-    <dl>
-      ${fila('Solicitud', r.fSolD ? fHora(r.fSolD) + (dias != null ? ` · hace ${dias} d` : '') : '')}
-      ${fila('Pedido', r.cantSol != null ? fmt(r.cantSol) + (r.entrega ? ' · entrega/cambio' : '') : '')}
-      ${fila('Teléfono', r.telefono)}
-      ${fila('Nota', r.nota)}
-      ${r.fGesD ? fila('Gestión', fHora(r.fGesD) + ` · ${dias} d después`) : ''}
-      ${fila('Transportista', nomTransp(r.transp) === '' || r.transp === '-' ? '' : nomTransp(r.transp))}
-      ${r.fGesD ? fila('Bolsones', `${fmt(r.cantB)}${r.tipoB ? ' · ' + r.tipoB : ''}`) : ''}
-      ${fila('Planta', r.planta)}
-      ${fila('Observación', r.obs)}
-      ${fila('Solicitud n.º', r.id)}
-    </dl>`;
+    ${edif ? `<div class="sub">${esc(edif)}</div>` : ''}
+    <div class="sub" style="margin-top:6px">${chipMuni(r.mun, true)}</div>
+    <hr>`;
 }
 
 // ── mapa y seguimiento de un día (Operación del día = hoy, Informe realizados = un día pasado) ──
@@ -583,10 +583,14 @@ const VInf = crearVista('inf', 'vInf', () => st.infDia, () => '', true,
 // En un día pasado, lo que se gestionó después estaba pendiente en ese momento.
 // Un día sin servicio (domingo) no tiene pendientes: solo lo que se gestionó igual ese día.
 // Con gestión ese día = realizado, aunque siga "Asignado" sin cerrar (igual que la hoja "Informe realizados")
+// otros: también lo realizado y lo asignado en municipios que no tocan ese día (solo Operación del día,
+// pedido del 05/11: que se vea si se trabajó o se asignó algo fuera del calendario). Los pendientes
+// siguen siendo solo los de los municipios del día.
 const munisDe = dia => (D.calendario[diaISO(desdeClave(dia)) - 1]?.municipios || []).map(x => x.municipio);
-const realizarDia = (dia, munis) => base().filter(r => munis.length
-  ? munis.includes(r.mun) && (r.gesK === dia || (r.solK < dia && (r.pendiente || r.gesK > dia)))
-  : r.gesK === dia);
+const realizarDia = (dia, munis, otros = false) => base().filter(r =>
+  (munis.length && munis.includes(r.mun) && (r.gesK === dia || (r.solK < dia && (r.pendiente || r.gesK > dia))))
+  || ((otros || !munis.length) && r.gesK === dia)
+  || (otros && r.estado === 'Asignado'));
 
 function renderVista(v) {
   renderSeguimiento(v); renderMapa(v);
@@ -619,7 +623,7 @@ function renderMapa(v) {
   const p = v.p;
   if (!$(p + 'Mapa').offsetWidth) return;
   const primera = prepararMapa(v);
-  const dia = v.dia(), munis = munisDe(dia), todos = realizarDia(dia, munis);
+  const dia = v.dia(), munis = munisDe(dia), todos = realizarDia(dia, munis, !v.pasado);
   const nom = v.nombre();
   // Sin etiquetas de municipio (pedido del usuario); solo se avisa si ese día no hay servicio
   $(p + 'Munis').innerHTML = munis.length ? esc(nom) : (nom ? nom + ': no' : 'No') + ' hay municipios de servicio';
@@ -691,12 +695,7 @@ function renderPendientes() {
 // renglón y solo fecha de solicitud, cantidad de bolsones y observaciones
 function fichaPendiente(r) {
   const fila = (k, val) => val || val === 0 ? `<dt>${k}</dt><dd>${esc(val)}</dd>` : '';
-  const edif = [r.edif && norm(r.edif) !== norm(r.dir) ? r.edif : '', r.tipoEdif].filter(Boolean).join(' · ');
-  return `<button class="ficha-x" aria-label="Cerrar">×</button>
-    <h3>${esc(r.dir)}</h3>
-    ${edif ? `<div class="sub">${esc(edif)}</div>` : ''}
-    <div class="sub" style="margin-top:6px">${chipMuni(r.mun, true)}</div>
-    <hr>
+  return fichaArriba(r) + `
     <dl>
       ${fila('Fecha de solicitud', r.fSolD ? fHora(r.fSolD) : '')}
       ${fila('Cantidad de bolsones', r.cantSol != null ? fmt(r.cantSol) : '')}
