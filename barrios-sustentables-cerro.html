@@ -64,6 +64,8 @@ button{font:inherit;color:inherit}
 .punto dd{font-weight:700;text-align:right}
 
 /* Detalle */
+/* Sin título: la tabla arranca por los encabezados. overflow:hidden recorta las cuatro esquinas redondeadas */
+.detalle{overflow:hidden}
 .tabla-wrap{overflow-x:auto}
 /* Tres columnas del mismo ancho y todo centrado, para que el espacio quede repartido parejo */
 .tabla{width:100%;border-collapse:collapse;font-size:13.5px;table-layout:fixed}
@@ -138,8 +140,7 @@ button{font:inherit;color:inherit}
   <div class="kpis" id="kpis"></div>
   <div class="puntos" id="puntos"></div>
 
-  <section class="card">
-    <div class="card-h"><h2>Detalle de solicitudes</h2><span class="nota" id="nota"></span></div>
+  <section class="card detalle">
     <div class="tabla-wrap"><table class="tabla" id="tabla"></table></div>
   </section>
 </div>
@@ -235,7 +236,6 @@ function render(G) {
       <dt>Última gestión</dt><dd class="num">${l.ultima ? fHora(l.ultima) : '—'}</dd></dl></div>`).join('');
 
   // Detalle
-  $('nota').textContent = API_URL ? '' : 'Últimos 90 días';
   $('tabla').innerHTML = `<thead><tr><th>Edificio</th><th><span class="largo">Fecha de gestión</span><span class="corto">Fecha</span></th><th class="c"><span class="largo">Cantidad bolsones</span><span class="corto">Bolsones</span></th></tr></thead><tbody>${
     G.length ? G.map(r => `<tr>
       <td><span class="ed"><i class="pt" style="--c:${r.lugar.color}"></i>${esc(r.lugar.nombre)}</span></td>
